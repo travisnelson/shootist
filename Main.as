@@ -1,7 +1,7 @@
 ﻿package {
 	import flash.display.Sprite;
 	import flash.events.*;
-  import flash.display.MovieClip;	
+    import flash.display.MovieClip;	
 	import flash.text.TextField;
 	import flash.utils.*;
 	import Box2D.Dynamics.*;
@@ -10,6 +10,7 @@
 	import Box2D.Collision.Shapes.*;
 	import Box2D.Common.Math.*;
 	import General.*;
+	import Shapes.*
 	
 	public class Main extends MovieClip {
 		public var m_world:b2World;
@@ -19,7 +20,9 @@
 		static public var m_sprite:Sprite;
 		public var m_input:Input;
  		
-		public var shooter;
+		public var Actors:Array=new Array();
+
+		public var shooter:Shooter;
 		public var bullets:Array=new Array();
 		public var particles:Array=new Array();
 		
@@ -27,6 +30,14 @@
 			// Add event for main loop
 			addEventListener(Event.ENTER_FRAME, Update, false, 0, true);
 
+			setupBox2d();
+			
+			shooter=new Shooter(m_world);
+			shooter.toWorld(m_world, stage.stageWidth/2/30, stage.stageHeight/2/30, -Math.PI/2, 1);
+			Actors.push(shooter);
+		}
+
+		public function setupBox2d(){
 			m_sprite = new Sprite();
 			addChild(m_sprite);
 			m_input = new Input(m_sprite);
@@ -37,7 +48,6 @@
 			worldAABB.upperBound.Set(100.0, 100.0);
 
 			// Define the gravity vector
-//			var gravity:b2Vec2 = new b2Vec2(0.0, 10.0);
 			var gravity:b2Vec2 = new b2Vec2(0.0, 0.0);
 			
 			// Allow bodies to sleep
@@ -45,141 +55,117 @@
 
 			// Construct a world object
 			m_world = new b2World(worldAABB, gravity, doSleep);
-						
-			// debug drawing
-			var dbgDraw:b2DebugDraw = new b2DebugDraw();
-			var dbgSprite:Sprite = new Sprite();
-			addChild(dbgSprite);
-			dbgDraw.m_sprite = m_sprite;
-			dbgDraw.m_drawScale = 30;
-			dbgDraw.m_fillAlpha = 0.6;
-			dbgDraw.m_lineThickness = 1.0;
-			dbgDraw.m_drawFlags = b2DebugDraw.e_shapeBit | b2DebugDraw.e_jointBit;
-			m_world.SetDebugDraw(dbgDraw);
-			
-			
-			shooter=new Shooter(m_world, 9, 6.5);
-			
-		}
-
-		public function randomShape(){
-			switch(int(Math.random()*2)){
-				case 0:
-					var shapeDef:b2PolygonDef=new b2PolygonDef();
-					shapeDef.vertexCount = 3;
-					shapeDef.vertices[0].Set(-Math.random(), 0.0);
-					shapeDef.vertices[1].Set(Math.random(), 0.0);
-					shapeDef.vertices[2].Set(0.0, Math.random()*2);
-					shapeDef.density = 1.0;
-					shapeDef.friction = 0.1;
-					shapeDef.restitution = 0.2;
-					shapeDef.filter.groupIndex=2;
-					return shapeDef;
-				case 1:
-					var circleDef:b2CircleDef;			
-	
-					// a shape for the body
-					circleDef = new b2CircleDef();
-					circleDef.radius = (Math.random()/2)+0.25;
-					circleDef.density = 1.0;
-					circleDef.friction = 0.1;
-					circleDef.restitution = 0.2;
-					circleDef.filter.groupIndex=2;
-	
-					return circleDef;			
-			}
 		}
 		
-		public function randomCircle(){
-
-			var bodyDef:b2BodyDef;
-			// body definition
-			bodyDef = new b2BodyDef();
-
+		public function sendAsteroid(){
 			var Width=stage.stageWidth/30;
 			var Height=stage.stageHeight/30;
 			var offStage=2;
-			
+			var x;
+			var y;
 			
 			if(Math.round(Math.random())){
-				bodyDef.position.x = Math.random()*Width;
+				x = Math.random()*Width;
 				
 				if(Math.round(Math.random())){
-					bodyDef.position.y = Height + offStage;
+					y = Height + offStage;
 				} else {
-					bodyDef.position.y = -offStage;
+					y = -offStage;
 				}
 				
 			} else {
-				bodyDef.position.y = Math.random()*Height;
+				y = Math.random()*Height;
 				
 				if(Math.round(Math.random())){
-					bodyDef.position.x = Width + offStage;
+					x = Width + offStage;
 				} else {
-					bodyDef.position.x = -offStage;
+					x = -offStage;
 				}
 			}
 			
-//				bodyDef.position.x = Math.random()*Width;
-//				bodyDef.position.y = Math.random()*Height;
+			var asteroid=new Asteroid();
+			asteroid.toWorld(m_world, x, y, 0, 1);
+			Actors.push(asteroid);
 			
-			bodyDef.angularDamping = 0.1;
-
-			var body = m_world.CreateBody(bodyDef);
-			body.CreateShape(randomShape());
-			body.SetMassFromShapes();			
-						
-			var center=new b2Vec2(body.GetPosition().x,body.GetPosition().y); 
+			var center=new b2Vec2(asteroid.body.GetPosition().x,asteroid.body.GetPosition().y); 
 			center.Subtract(new b2Vec2(shooter.body.GetPosition().x,shooter.body.GetPosition().y));
 			center.Normalize();
 			center=center.Negative();
-			center.Multiply((Math.random()*5)+3);
+			center.Multiply((Math.random()*5)+3); // velocity of asteroid
 
-			body.SetLinearVelocity(center);
-			
-//			body.ApplyForce(center, body.GetPosition());			
-			
-			
+			asteroid.body.SetLinearVelocity(center);
+			asteroid.body.SetAngularVelocity(Math.round(Math.random()*20)-10);
 		}
 		
-		public function removeOldBullets(element:*, index:int, arr:Array):Boolean {
-			if((getTimer()-element.GetUserData()) > 5000){
-				m_world.DestroyBody(element);
+		public function garbageCollection(element:*, index:int, arr:Array):Boolean {
+			var timeout=0;
+			
+			if(element is Bullet){
+				timeout=5000;
+			} else if(element is Asteroid){
+				timeout=99999;
+			} else if(element is Particle){
+				timeout=500;
+			}
+
+			if(timeout && (getTimer()-element.body.GetUserData()) > timeout){
+				m_world.DestroyBody(element.body);
 				return false;
 			}
-			return true;
-		}
-		public function removeOldParticles(element:*, index:int, arr:Array):Boolean {
-			if((getTimer()-element.GetUserData()) > 500){
-				m_world.DestroyBody(element);
-				return false;
-			}
+
 			return true;
 		}
 		
 		public function Update(e:Event):void{
 			m_currentTime++;
-			
+
 			// Update mouse joint
 			UpdateMouseWorld()
-			MouseDestroy();
 			MouseDrag();
 			
 			UpdateKeyboardWorld();
 
-			// fade old bullets
-			bullets=bullets.filter(removeOldBullets);
-			particles=particles.filter(removeOldParticles);
+			Actors=Actors.filter(garbageCollection);
 			
-			// new invaders
 			var modStep:int=50 - (m_currentTime/50);
 			if(!(m_currentTime % modStep))
-				randomCircle();
+				sendAsteroid();
+			
+			var actor;
+			for each (actor in Actors){
+				actor.Update();
+			}
 			
 			m_world.Step(m_timeStep, m_iterations);
 			Input.update();
+			
+			// scroll
+            var loc:b2Vec2=shooter.body.GetPosition();
+			var limit=stage.stageHeight/3;
+			if((loc.y*30) < limit){
+				var offset=(limit-(loc.y*30))/30;
+				loc.y=(limit/30);
+				shooter.body.SetXForm(loc, shooter.body.GetAngle());
+				
+				for each (actor in Actors){
+					if(actor is Asteroid){
+						loc=actor.body.GetPosition();
+						loc.y+=offset;
+						actor.body.SetXForm(loc, actor.body.GetAngle());
+					}
+				}
+			}
+			
+			m_sprite.graphics.clear();
+			for(var level=0;level<8;++level){
+				for each (actor in Actors){
+					if(actor.collisionLevel & Math.pow(2,level)){
+						actor.Draw(m_sprite, Math.pow(2,level));
+					}
+				}
+			}
 		}
-		
+
 		// world mouse position
 		static public var mouseXWorldPhys:Number;
 		static public var mouseYWorldPhys:Number;
@@ -191,7 +177,7 @@
 		
 		public function UpdateKeyboardWorld():void {
 			if(Input.isKeyDown(87)){ // w
-				particles.push(shooter.moveForward());
+				Actors.push(shooter.moveForward());
 			}
 			if(Input.isKeyDown(65)){ // a
 //				shooter.body.ApplyTorque(-0.01);
@@ -223,16 +209,20 @@
 		//======================
 		public function MouseDrag():void{
 			// mouse press
+			var bullet;
 			
 			if(Input.mouseDown){
 				// rapid fire
-				if(!(m_currentTime % 3))
-					bullets.push(shooter.shoot(mouseXWorldPhys, mouseYWorldPhys));
+				if(!(m_currentTime % 3)){
+					bullet=shooter.shoot(mouseXWorldPhys, mouseYWorldPhys);
+					Actors.push(bullet);
+				}
 			}
 			
 			if (Input.mouseDown && !mousePressed){
 				mousePressed=true;
-  			bullets.push(shooter.shoot(mouseXWorldPhys, mouseYWorldPhys));
+				bullet=shooter.shoot(mouseXWorldPhys, mouseYWorldPhys);
+				Actors.push(bullet);
 			}
 			
 			
@@ -248,25 +238,6 @@
 			// mouse move
 			{
 //				var p2:b2Vec2 = new b2Vec2(mouseXWorldPhys, mouseYWorldPhys);
-			}
-		}
-		
-		
-		
-		//======================
-		// Mouse Destroy
-		//======================
-		public function MouseDestroy():void{
-			// mouse press
-			if (!Input.mouseDown && Input.isKeyPressed(68/*D*/)){
-				
-				var body:b2Body = GetBodyAtMouse(true);
-				
-				if (body)
-				{
-					m_world.DestroyBody(body);
-					return;
-				}
 			}
 		}
 		
